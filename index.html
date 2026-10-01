@@ -6,15 +6,29 @@
   <title>QR Code 分割畫面掃描器</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; }
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; font-family: sans-serif; }
     
-    /* 設定相機區域與強制白字 */
-    #reader { flex: 1; width: 100%; background: #222; color: white !important; }
-    #reader * { color: white !important; } /* 強制 html5-qrcode 產生的文字為白色 */
+    /* 調整 1：將相機高度固定為 35vh（約螢幕 1/3），加上 overflow: hidden 避免溢出 */
+    #reader { height: 35vh; width: 100%; background: #222; color: white !important; overflow: hidden; }
+    #reader * { color: white !important; }
     
-    #browser { flex: 1; width: 100%; border: none; border-top: 2px solid #ccc; }
+    #url-bar {
+      background: #333; color: #fff; padding: 10px 15px; font-size: 14px; 
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 2px solid #555;
+    }
+    #scanned-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; color: #aaa; }
+    #open-link {
+      background: #4CAF50; color: white; padding: 6px 12px; border-radius: 4px; 
+      text-decoration: none; font-weight: bold; font-size: 13px; display: none;
+    }
+
+    /* 調整 2：下方瀏覽器維持 flex: 1，會自動填滿剩下約 2/3 的大空間 */
+    #browser { flex: 1; width: 100%; border: none; background: #f9f9f9; }
+    
+    /* 將提示框位置稍微往上移，配合縮小的相機畫面 */
     #toast {
-      position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+      position: absolute; top: 10%; left: 50%; transform: translate(-50%, -50%);
       background: rgba(0, 180, 0, 0.9); color: white; padding: 12px 24px;
       border-radius: 8px; font-weight: bold; font-size: 18px;
       display: none; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
@@ -24,6 +38,12 @@
 <body>
   <div id="toast">掃碼成功 OK</div>
   <div id="reader"></div>
+  
+  <div id="url-bar">
+    <span id="scanned-url">尚未掃描...</span>
+    <a id="open-link" href="#" target="_blank">↗ 另開網頁</a>
+  </div>
+
   <iframe id="browser" src="about:blank"></iframe>
 
   <script>
@@ -34,30 +54,40 @@
       if(decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
         if (decodedText !== lastScannedUrl) {
           lastScannedUrl = decodedText;
-          document.getElementById('browser').src = decodedText;
           
           const toast = document.getElementById('toast');
           toast.style.display = 'block';
           setTimeout(() => { toast.style.display = 'none'; }, 2000);
+          
+          document.getElementById('scanned-url').textContent = decodedText;
+          document.getElementById('scanned-url').style.color = "#fff";
+          const openLink = document.getElementById('open-link');
+          openLink.href = decodedText;
+          openLink.style.display = 'inline-block';
+
+          document.getElementById('browser').src = decodedText;
         }
       }
     }
     
-    // 改用 Html5Qrcode 直接控制，而非 Html5QrcodeScanner 預設 UI
     html5QrCode = new Html5Qrcode("reader");
 
-    // 強制設定為後置鏡頭 (environment)
-    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    const config = { 
+      fps: 10,
+      qrbox: function(viewfinderWidth, viewfinderHeight) {
+        // 調整 3：因為相機高度變小了，把掃描框比例從 60% 拉大到 75%，避免框太小難以對焦
+        let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+        let qrboxSize = Math.floor(minEdgeSize * 0.75);
+        return { width: qrboxSize, height: qrboxSize };
+      }
+    };
     
-    // 自動啟動後置相機
     html5QrCode.start(
       { facingMode: "environment" }, 
       config,
       onScanSuccess
     ).catch(err => {
-      console.error("無法啟動相機，請確認是否已給予權限", err);
-      // 若後置鏡頭啟動失敗，可以在畫面上提示使用者
-      document.getElementById('reader').innerHTML = "<p style='padding:20px; text-align:center;'>無法啟動相機，請確認瀏覽器已開啟相機權限。<br><br>錯誤代碼: " + err + "</p>";
+      console.error("相機啟動錯誤", err);
     });
   </script>
 </body>
