@@ -7,7 +7,11 @@
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; }
-    #reader { flex: 1; width: 100%; background: #222; }
+    
+    /* 設定相機區域與強制白字 */
+    #reader { flex: 1; width: 100%; background: #222; color: white !important; }
+    #reader * { color: white !important; } /* 強制 html5-qrcode 產生的文字為白色 */
+    
     #browser { flex: 1; width: 100%; border: none; border-top: 2px solid #ccc; }
     #toast {
       position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
@@ -24,6 +28,7 @@
 
   <script>
     let lastScannedUrl = "";
+    let html5QrCode;
 
     function onScanSuccess(decodedText, decodedResult) {
       if(decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
@@ -38,10 +43,22 @@
       }
     }
     
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-      "reader", { fps: 10, qrbox: { width: 250, height: 250 } }
-    );
-    html5QrcodeScanner.render(onScanSuccess);
+    // 改用 Html5Qrcode 直接控制，而非 Html5QrcodeScanner 預設 UI
+    html5QrCode = new Html5Qrcode("reader");
+
+    // 強制設定為後置鏡頭 (environment)
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    
+    // 自動啟動後置相機
+    html5QrCode.start(
+      { facingMode: "environment" }, 
+      config,
+      onScanSuccess
+    ).catch(err => {
+      console.error("無法啟動相機，請確認是否已給予權限", err);
+      // 若後置鏡頭啟動失敗，可以在畫面上提示使用者
+      document.getElementById('reader').innerHTML = "<p style='padding:20px; text-align:center;'>無法啟動相機，請確認瀏覽器已開啟相機權限。<br><br>錯誤代碼: " + err + "</p>";
+    });
   </script>
 </body>
 </html>
