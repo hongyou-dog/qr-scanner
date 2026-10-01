@@ -2,43 +2,45 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>QR Code 分割畫面掃描器</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; font-family: sans-serif; background: #000; }
-    
-    /* 修正 1：相機區域改用固定高度，確保足夠容納正方形的掃描框 */
-    #reader { height: 350px; width: 100%; background: #000; color: white !important; overflow: hidden; position: relative; }
-    #reader * { color: white !important; }
-    
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; font-family: sans-serif; background: #000; overflow: hidden; }
+
+    /* 相機區域：直接佔用上方 35% 空間，沒有任何內框 */
+    #reader { height: 35vh; width: 100%; background: #000; position: relative; overflow: hidden; }
+
+    /* 強制影片填滿整個上半部，且不變形 */
+    #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
+
     #url-bar {
-      background: #333; color: #fff; padding: 10px 15px; font-size: 14px; 
+      background: #222; color: #fff; padding: 10px 15px; font-size: 14px;
       display: flex; justify-content: space-between; align-items: center;
       border-bottom: 2px solid #555;
     }
     #scanned-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; color: #aaa; }
     #open-link {
-      background: #4CAF50; color: white; padding: 6px 12px; border-radius: 4px; 
+      background: #4CAF50; color: white; padding: 6px 12px; border-radius: 4px;
       text-decoration: none; font-weight: bold; font-size: 13px; display: none;
     }
 
     #browser { flex: 1; width: 100%; border: none; background: #f9f9f9; }
-    
+
     #toast {
       position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
       background: rgba(0, 180, 0, 0.9); color: white; padding: 12px 24px;
       border-radius: 8px; font-weight: bold; font-size: 18px;
-      display: none; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      display: none; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none;
     }
   </style>
 </head>
 <body>
   <div id="toast">掃碼成功 OK</div>
-  
-  <!-- 掃描區塊 -->
+
+  <!-- 整個 reader 就是掃描區，不再有內層容器 -->
   <div id="reader"></div>
-  
+
   <div id="url-bar">
     <span id="scanned-url">等待掃描...</span>
     <a id="open-link" href="#" target="_blank">↗ 另開網頁</a>
@@ -54,11 +56,11 @@
       if(decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
         if (decodedText !== lastScannedUrl) {
           lastScannedUrl = decodedText;
-          
+
           const toast = document.getElementById('toast');
           toast.style.display = 'block';
           setTimeout(() => { toast.style.display = 'none'; }, 2000);
-          
+
           document.getElementById('scanned-url').textContent = decodedText;
           document.getElementById('scanned-url').style.color = "#fff";
           const openLink = document.getElementById('open-link');
@@ -69,18 +71,15 @@
         }
       }
     }
-    
+
     html5QrCode = new Html5Qrcode("reader");
 
-    // 修正 2：直接指定長寬像素，強制畫出一個絕對的正方形（250x250像素）
-    // 放棄讓系統自己算，解決白框被壓成扁長方形的問題
-    const config = { 
-      fps: 10,
-      qrbox: { width: 250, height: 250 }
-    };
-    
+    // 關鍵修改：移除 qrbox 參數！
+    // 這樣套件就不會去畫那個多餘的白框，而是直接把整個 #reader 的範圍當作有效掃描區
+    const config = { fps: 15 };
+
     html5QrCode.start(
-      { facingMode: "environment" }, 
+      { facingMode: "environment" },
       config,
       onScanSuccess
     ).catch(err => {
