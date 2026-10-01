@@ -6,21 +6,38 @@
   <title>QR Code 分割畫面掃描器</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; }
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; }
     #reader { flex: 1; width: 100%; background: #222; }
     #browser { flex: 1; width: 100%; border: none; border-top: 2px solid #ccc; }
+    #toast {
+      position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(0, 180, 0, 0.9); color: white; padding: 12px 24px;
+      border-radius: 8px; font-weight: bold; font-size: 18px;
+      display: none; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
   </style>
 </head>
 <body>
+  <div id="toast">掃碼成功 OK</div>
   <div id="reader"></div>
   <iframe id="browser" src="about:blank"></iframe>
 
   <script>
+    let lastScannedUrl = "";
+
     function onScanSuccess(decodedText, decodedResult) {
       if(decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-        document.getElementById('browser').src = decodedText;
+        if (decodedText !== lastScannedUrl) {
+          lastScannedUrl = decodedText;
+          document.getElementById('browser').src = decodedText;
+          
+          const toast = document.getElementById('toast');
+          toast.style.display = 'block';
+          setTimeout(() => { toast.style.display = 'none'; }, 2000);
+        }
       }
     }
+    
     const html5QrcodeScanner = new Html5QrcodeScanner(
       "reader", { fps: 10, qrbox: { width: 250, height: 250 } }
     );
