@@ -2,88 +2,126 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>QR Code 分割畫面掃描器</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <!-- 固定版本、改用 jsDelivr（unpkg 無版本會隨時變動） -->
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; font-family: sans-serif; background: #000; overflow: hidden; }
-
-    /* 相機區域：直接佔用上方 35% 空間，沒有任何內框 */
-    #reader { height: 35vh; width: 100%; background: #000; position: relative; overflow: hidden; }
-
-    /* 強制影片填滿整個上半部，且不變形 */
+    html, body { margin: 0; height: 100%; }
+    body {
+      display: flex; flex-direction: column;
+      height: 100dvh; /* 手機網址列伸縮時不會被切掉 */
+      font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+      background: #000; overflow: hidden; position: relative;
+    }
+    #reader { flex: 0 0 35%; width: 100%; background: #000; position: relative; overflow: hidden; }
     #reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
 
     #url-bar {
-      background: #222; color: #fff; padding: 10px 15px; font-size: 14px;
-      display: flex; justify-content: space-between; align-items: center;
+      flex: 0 0 auto; background: #222; color: #fff; padding: 10px 15px; font-size: 14px;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
       border-bottom: 2px solid #555;
     }
-    #scanned-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%; color: #aaa; }
+    #scanned-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #aaa; }
     #open-link {
-      background: #4CAF50; color: white; padding: 6px 12px; border-radius: 4px;
+      flex: none; background: #4CAF50; color: #fff; padding: 6px 12px; border-radius: 4px;
       text-decoration: none; font-weight: bold; font-size: 13px; display: none;
     }
+    #hint { flex: 0 0 auto; background: #333; color: #ccc; font-size: 12px; padding: 6px 15px; display: none; }
 
     #browser { flex: 1; width: 100%; border: none; background: #f9f9f9; }
 
     #toast {
       position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
-      background: rgba(0, 180, 0, 0.9); color: white; padding: 12px 24px;
+      background: rgba(0, 150, 0, 0.92); color: #fff; padding: 12px 24px;
       border-radius: 8px; font-weight: bold; font-size: 18px;
-      display: none; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none;
+      display: none; z-index: 100; pointer-events: none;
+    }
+    #error {
+      position: absolute; inset: 0 0 auto 0; height: 35%; display: none;
+      align-items: center; justify-content: center; text-align: center;
+      color: #fff; padding: 20px; box-sizing: border-box; z-index: 50; font-size: 15px; line-height: 1.5;
     }
   </style>
 </head>
 <body>
-  <div id="toast">掃碼成功 OK</div>
-
-  <!-- 整個 reader 就是掃描區，不再有內層容器 -->
+  <div id="toast">掃碼成功</div>
   <div id="reader"></div>
+  <div id="error"></div>
 
   <div id="url-bar">
     <span id="scanned-url">等待掃描...</span>
-    <a id="open-link" href="#" target="_blank">↗ 另開網頁</a>
+    <a id="open-link" href="#" target="_blank" rel="noopener noreferrer">↗ 另開網頁</a>
   </div>
+  <div id="hint">若下方一片空白，代表該網站不允許內嵌，請點「另開網頁」。</div>
 
-  <iframe id="browser" src="about:blank"></iframe>
+  <!-- sandbox：避免掃到的網頁操控或跳轉本頁 -->
+  <iframe id="browser" src="about:blank"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          referrerpolicy="no-referrer"></iframe>
 
   <script>
-    let lastScannedUrl = "";
-    let html5QrCode;
+    const $ = id => document.getElementById(id);
+    const COOLDOWN_MS = 3000;
+    let lastUrl = "", lastTime = 0, toastTimer = null;
 
-    function onScanSuccess(decodedText, decodedResult) {
-      if(decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-        if (decodedText !== lastScannedUrl) {
-          lastScannedUrl = decodedText;
-
-          const toast = document.getElementById('toast');
-          toast.style.display = 'block';
-          setTimeout(() => { toast.style.display = 'none'; }, 2000);
-
-          document.getElementById('scanned-url').textContent = decodedText;
-          document.getElementById('scanned-url').style.color = "#fff";
-          const openLink = document.getElementById('open-link');
-          openLink.href = decodedText;
-          openLink.style.display = 'inline-block';
-
-          document.getElementById('browser').src = decodedText;
-        }
-      }
+    function isSafeUrl(text) {
+      try {
+        const u = new URL(text.trim());
+        return u.protocol === "https:" || u.protocol === "http:";
+      } catch { return false; }
     }
 
-    html5QrCode = new Html5Qrcode("reader");
+    function onScanSuccess(decodedText) {
+      const now = Date.now();
+      if (!isSafeUrl(decodedText)) return;
+      // 相同網址在冷卻時間內不重複載入，但冷卻後可以重新掃描
+      if (decodedText === lastUrl && now - lastTime < COOLDOWN_MS) { lastTime = now; return; }
+      lastUrl = decodedText; lastTime = now;
 
-    // 關鍵修改：移除 qrbox 參數！
-    // 這樣套件就不會去畫那個多餘的白框，而是直接把整個 #reader 的範圍當作有效掃描區
-    const config = { fps: 15 };
+      const toast = $("toast");
+      toast.style.display = "block";
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.style.display = "none"; }, 1500);
 
-    html5QrCode.start(
-      { facingMode: "environment" },
-      config,
-      onScanSuccess
-    ).catch(err => {
-      console.error("相機啟動錯誤", err);
+      $("scanned-url").textContent = decodedText;
+      $("scanned-url").style.color = "#fff";
+      $("open-link").href = decodedText;
+      $("open-link").style.display = "inline-block";
+      $("hint").style.display = "block";
+      $("browser").src = decodedText;
+
+      if (navigator.vibrate) navigator.vibrate(60);
+    }
+
+    function showError(msg) {
+      const el = $("error");
+      el.textContent = msg;
+      el.style.display = "flex";
+    }
+
+    const scanner = new Html5Qrcode("reader", { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] });
+
+    if (!window.isSecureContext) {
+      showError("相機只能在 HTTPS 或 localhost 下使用，請改用 https 開啟此頁。");
+    } else {
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 15, aspectRatio: window.innerWidth / (window.innerHeight * 0.35) },
+        onScanSuccess,
+        () => {} // 每幀沒掃到時的回呼，忽略
+      ).catch(err => {
+        console.error("相機啟動錯誤", err);
+        const name = (err && err.name) || "";
+        showError(name === "NotAllowedError" || String(err).includes("Permission")
+          ? "未取得相機權限，請在瀏覽器設定中允許使用相機後重新整理。"
+          : "無法啟動相機，請確認裝置有後鏡頭且未被其他程式占用。");
+      });
+    }
+
+    // 離開頁面時釋放相機
+    window.addEventListener("pagehide", () => {
+      if (scanner.isScanning) scanner.stop().catch(() => {});
     });
   </script>
 </body>
