@@ -6,10 +6,10 @@
   <title>QR Code 分割畫面掃描器</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
-    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; font-family: sans-serif; }
+    body { margin: 0; display: flex; flex-direction: column; height: 100vh; position: relative; font-family: sans-serif; background: #000; }
     
-    /* 調整 1：將相機高度固定為 35vh（約螢幕 1/3），加上 overflow: hidden 避免溢出 */
-    #reader { height: 35vh; width: 100%; background: #222; color: white !important; overflow: hidden; }
+    /* 修正 1：相機區域改用固定高度，確保足夠容納正方形的掃描框 */
+    #reader { height: 350px; width: 100%; background: #000; color: white !important; overflow: hidden; position: relative; }
     #reader * { color: white !important; }
     
     #url-bar {
@@ -23,12 +23,10 @@
       text-decoration: none; font-weight: bold; font-size: 13px; display: none;
     }
 
-    /* 調整 2：下方瀏覽器維持 flex: 1，會自動填滿剩下約 2/3 的大空間 */
     #browser { flex: 1; width: 100%; border: none; background: #f9f9f9; }
     
-    /* 將提示框位置稍微往上移，配合縮小的相機畫面 */
     #toast {
-      position: absolute; top: 10%; left: 50%; transform: translate(-50%, -50%);
+      position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
       background: rgba(0, 180, 0, 0.9); color: white; padding: 12px 24px;
       border-radius: 8px; font-weight: bold; font-size: 18px;
       display: none; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
@@ -37,10 +35,12 @@
 </head>
 <body>
   <div id="toast">掃碼成功 OK</div>
+  
+  <!-- 掃描區塊 -->
   <div id="reader"></div>
   
   <div id="url-bar">
-    <span id="scanned-url">尚未掃描...</span>
+    <span id="scanned-url">等待掃描...</span>
     <a id="open-link" href="#" target="_blank">↗ 另開網頁</a>
   </div>
 
@@ -72,14 +72,11 @@
     
     html5QrCode = new Html5Qrcode("reader");
 
+    // 修正 2：直接指定長寬像素，強制畫出一個絕對的正方形（250x250像素）
+    // 放棄讓系統自己算，解決白框被壓成扁長方形的問題
     const config = { 
       fps: 10,
-      qrbox: function(viewfinderWidth, viewfinderHeight) {
-        // 調整 3：因為相機高度變小了，把掃描框比例從 60% 拉大到 75%，避免框太小難以對焦
-        let minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-        let qrboxSize = Math.floor(minEdgeSize * 0.75);
-        return { width: qrboxSize, height: qrboxSize };
-      }
+      qrbox: { width: 250, height: 250 }
     };
     
     html5QrCode.start(
